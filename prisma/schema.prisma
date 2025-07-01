@@ -1,0 +1,72 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String            @id @default(cuid())
+  username         String            @unique
+  createdAt        DateTime          @default(now())
+  classifications  Classification[]
+  skippedGalaxies  SkippedGalaxy[]
+}
+
+model Galaxy {
+  id               String            @id
+  ra               Float
+  dec              Float
+  x                Float?
+  y                Float?
+  redshiftX        Float?
+  redshiftY        Float?
+  rR               Float?
+  q                Float?
+  pa               Float?
+  nucleus          Boolean?
+  previousId       String?
+  nextId           String?
+  previous         Galaxy?           @relation("GalaxyChain", fields: [previousId], references: [id])
+  next             Galaxy?           @relation("GalaxyChain", fields: [nextId], references: [id])
+  previousRef      Galaxy[]          @relation("GalaxyChain")
+  classifications  Classification[]
+  skippedGalaxies  SkippedGalaxy[]
+
+  @@map("galaxies")
+}
+
+model Classification {
+  id              String    @id @default(cuid())
+  userId          String
+  galaxyId        String
+  lsbClass        Int
+  morphology      Int
+  comments        String?
+  awesomeFlag     Boolean   @default(false)
+  validRedshift   Boolean   @default(false)
+  dateClassified  DateTime  @default(now())
+  
+  user            User      @relation(fields: [userId], references: [id])
+  galaxy          Galaxy    @relation(fields: [galaxyId], references: [id])
+
+  @@unique([userId, galaxyId])
+  @@map("classifications")
+}
+
+model SkippedGalaxy {
+  id          String    @id @default(cuid())
+  userId      String
+  galaxyId    String
+  comments    String?
+  dateSkipped DateTime  @default(now())
+  
+  user        User      @relation(fields: [userId], references: [id])
+  galaxy      Galaxy    @relation(fields: [galaxyId], references: [id])
+
+  @@unique([userId, galaxyId])
+  @@map("skipped_galaxies")
+}
