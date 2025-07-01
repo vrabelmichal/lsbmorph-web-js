@@ -1,0 +1,35 @@
+/* src/styles/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .galaxy-image {
+    @apply w-full rounded cursor-crosshair;
+  }
+  
+  .contrast-high {
+    filter: contrast(150%) brightness(120%);
+  }
+  
+  .contrast-extreme {
+    filter: contrast(200%) brightness(150%);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Mobile responsiveness for galaxy images */
+@media (max-width: 768px) {
+  .mobile-reorder {
+    order: 1;
+  }
+  
+  .mobile-first {
+    order: -1;
+  }
+}

@@ -1,0 +1,15 @@
+import jwt from 'jsonwebtoken';
+import { NextApiRequest } from 'next';
+
+export const verifyToken = async (req: NextApiRequest) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!token) return null;
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    return decoded;
+  } catch {
+    return null;
+  }
+};
