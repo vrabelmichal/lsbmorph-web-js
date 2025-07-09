@@ -1,51 +1,37 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Button } from '../ui/Button';
-import { LazyImage } from '../ui/LazyImage';
-import { useResponsive } from '../../hooks/useResponsive';
-import { useImageContrast } from '../../hooks/useImageContrast';
-
-interface GalaxyImage {
-  path: string;
-  title: string;
-  baseName: string;
-  success: boolean;
-  vmax?: number;
-}
+import { ImageService } from '../../lib/services/imageService';
 
 interface GalaxyImagesProps {
   galaxyId: string;
-  initialImages: GalaxyImage[];
+  initialImages: any[];
 }
 
-export const GalaxyImages: React.FC<GalaxyImagesProps> = ({ 
-  galaxyId, 
-  initialImages 
-}) => {
-  const { isMobile } = useResponsive();
-  const { 
-    images, 
-    contrastIndex, 
-    loading, 
-    handleContrastChange 
-  } = useImageContrast(galaxyId, initialImages);
+export const GalaxyImages: React.FC<GalaxyImagesProps> = ({ galaxyId, initialImages }) => {
+  const [images, setImages] = useState(initialImages);
+  const [contrastIndex, setContrastIndex] = useState(0);
+  const [loading, setLoading] = useState(false);
 
-  // Define image order based on screen size
-  const orderedImages = useMemo(() => {
-    if (isMobile) {
-      // Mobile priority order: most important images first
-      const mobileOrder = ['aplpy', 'lupton', 'masked_r_band', 'residual', 'raw_r_band', 'galfit_model'];
-      return images.sort((a, b) => {
-        const aIndex = mobileOrder.indexOf(a.baseName);
-        const bIndex = mobileOrder.indexOf(b.baseName);
-        return aIndex - bIndex;
-      });
+  const contrastOptions = ImageService.getContrastOptions();
+
+  const handleContrastChange = useCallback(async () => {
+    setLoading(true);
+    const newIndex = (contrastIndex + 1) % contrastOptions.vmaxPercentiles.length;
+    setContrastIndex(newIndex);
+
+    const vmax = contrastOptions.vmaxPercentiles[newIndex];
+    const vmaxRaw = contrastOptions.vmaxRawPercentiles[newIndex];
+
+    try {
+      const response = await fetch(`/api/images/galaxy-set/${galaxyId}?vmax=${vmax}&vmaxRaw=${vmaxRaw}`);
+      const newImages = await response.json();
+      setImages(newImages);
+    } catch (error) {
+      console.error('Error updating contrast:', error);
+    } finally {
+      setLoading(false);
     }
-    return images; // Keep original order on desktop
-  }, [images, isMobile]);
-
-  // Split images into rows
-  const firstRowImages = orderedImages.slice(0, 3);
-  const secondRowImages = orderedImages.slice(3);
+  }, [contrastIndex, galaxyId, contrastOptions]);
 
   return (
     <div className="space-y-4">
@@ -55,93 +41,49 @@ export const GalaxyImages: React.FC<GalaxyImagesProps> = ({
           onClick={handleContrastChange} 
           disabled={loading}
           variant="secondary"
-          size="sm"
         >
           {loading ? 'Updating...' : 'Contrast'}
         </Button>
       </div>
 
-      {/* First row - prioritized for mobile */}
+      {/* First row - 3 images */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {firstRowImages.map((image, index) => (
-          <LazyImageCard 
-            key={`${image.baseName}-${contrastIndex}`} 
-            image={image}
-            priority={index < 2} // First 2 images load immediately
-          />
+        {images.slice(0, 3).map((image, index) => (
+          <ImageCard key={`${image.baseName}-${contrastIndex}`} image={image} />
         ))}
       </div>
 
-      {/* Second row - lazy loaded */}
+      {/* Second row - remaining images */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {secondRowImages.map((image) => (
-          <LazyImageCard 
-            key={`${image.baseName}-${contrastIndex}`} 
-            image={image}
-            priority={false}
-          />
+        {images.slice(3).map((image, index) => (
+          <ImageCard key={`${image.baseName}-${contrastIndex}`} image={image} />
         ))}
       </div>
     </div>
   );
 };
 
-interface LazyImageCardProps {
-  image: GalaxyImage;
-  priority: boolean;
-}
-
-const LazyImageCard: React.FC<LazyImageCardProps> = ({ image, priority }) => {
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-
-  const placeholder = (
-    <div className="aspect-square bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse flex flex-col items-center justify-center">
-      <div className="w-8 h-8 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mb-2"></div>
-      <div className="text-gray-500 text-xs">Loading {image.title}</div>
-    </div>
-  );
-
-  const errorPlaceholder = (
-    <div className="aspect-square bg-red-50 border-2 border-red-200 flex flex-col items-center justify-center">
-      <div className="text-red-400 text-sm mb-1">⚠</div>
-      <div className="text-red-600 text-xs text-center px-2">
-        Failed to load {image.title}
-      </div>
-    </div>
-  );
-
+const ImageCard: React.FC<{ image: any }> = ({ image }) => {
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       <div className="bg-gray-50 px-4 py-2 border-b">
         <div className="flex justify-between items-center">
-          <h4 className="font-medium text-sm truncate">{image.title}</h4>
+          <h4 className="font-medium text-sm">{image.title}</h4>
           {image.vmax && (
-            <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
+            <span className="text-xs text-gray-500">
               ({image.vmax.toFixed(1)})
             </span>
           )}
         </div>
       </div>
-      
-      <LazyImage
-        src={image.path}
-        alt={image.title}
-        className="w-full aspect-square object-cover cursor-crosshair"
-        placeholder={imageError ? errorPlaceholder : placeholder}
-        priority={priority}
-        onLoad={() => setImageLoaded(true)}
-        onError={() => setImageError(true)}
-      />
-      
-      {/* Loading indicator overlay */}
-      {!imageLoaded && !imageError && (
-        <div className="absolute inset-0 bg-black bg-opacity-10 flex items-center justify-center">
-          <div className="bg-white bg-opacity-90 rounded-full p-2">
-            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        </div>
-      )}
+      <div className="aspect-square relative">
+        <img
+          src={image.path}
+          alt={image.title}
+          className="w-full h-full object-cover cursor-crosshair"
+          loading="lazy"
+        />
+      </div>
     </div>
   );
 };
