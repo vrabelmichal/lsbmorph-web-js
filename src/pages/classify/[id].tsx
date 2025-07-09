@@ -4,14 +4,18 @@ import { useRouter } from 'next/router';
 import { ClassificationForm } from '../../components/forms/ClassificationForm';
 import { GalaxyImages } from '../../components/galaxy/GalaxyImages';
 import { Button } from '../../components/ui/Button';
+import { Layout } from '../../components/layout/Layout';
+import { useResponsive } from '../../hooks/useResponsive';
 import { prisma } from '../../lib/db';
+import { ImageService } from '../../lib/services/imageService';
 
 interface ClassifyPageProps {
   galaxy: any;
   nextGalaxy?: any;
   previousGalaxy?: any;
   currentClassification?: any;
-  imageUrls: string[];
+  images: any[];
+  queryParams: string;
 }
 
 export default function ClassifyPage({
@@ -19,9 +23,11 @@ export default function ClassifyPage({
   nextGalaxy,
   previousGalaxy,
   currentClassification,
-  imageUrls
+  images,
+  queryParams
 }: ClassifyPageProps) {
   const router = useRouter();
+  const { isMobile, isSmallScreen } = useResponsive();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (formData: any) => {
@@ -42,7 +48,7 @@ export default function ClassifyPage({
 
       if (response.ok) {
         if (nextGalaxy) {
-          router.push(`/classify/${nextGalaxy.id}`);
+          router.push(`/classify/${nextGalaxy.id}${queryParams ? `?${queryParams}` : ''}`);
         } else {
           router.push('/results');
         }
@@ -66,7 +72,7 @@ export default function ClassifyPage({
       });
 
       if (nextGalaxy) {
-        router.push(`/classify/${nextGalaxy.id}`);
+        router.push(`/classify/${nextGalaxy.id}${queryParams ? `?${queryParams}` : ''}`);
       }
     } catch (error) {
       console.error('Skip failed:', error);
@@ -74,68 +80,118 @@ export default function ClassifyPage({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">
-          LSB Galaxy Classification - <span className="text-blue-600">{galaxy.id}</span>
-        </h1>
+    <Layout>
+      <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-8">
+          <h1 className="text-2xl md:text-3xl font-bold mb-6">
+            <span className="hidden md:inline">LSB Galaxy Classification - </span>
+            <span className="text-blue-600">{galaxy.id}</span>
+          </h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3">
-            <GalaxyImages images={imageUrls} galaxyId={galaxy.id} />
-          </div>
-
-          <div className="space-y-4">
-            <ClassificationForm
-              onSubmit={handleSubmit}
-              currentClassification={currentClassification}
-              galaxy={galaxy}
-            />
-
-            <div className="flex space-x-2">
-              {previousGalaxy && (
-                <Button
-                  variant="secondary"
-                  onClick={() => router.push(`/classify/${previousGalaxy.id}`)}
-                >
-                  Previous
-                </Button>
-              )}
+          <div className={`grid gap-6 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-4'}`}>
+            {/* Images - shown first on mobile */}
+            <div className={`${isMobile ? 'order-1' : 'lg:col-span-3'}`}>
+              <GalaxyImages 
+                galaxyId={galaxy.id} 
+                initialImages={images}
+              />
               
-              {nextGalaxy && (
+              {/* Aladin button - below images on mobile */}
+              <div className="mt-4">
                 <Button
-                  variant="warning"
-                  onClick={handleSkip}
+                  variant="info"
+                  onClick={() => window.open(`/aladin/${galaxy.ra}/${galaxy.dec}`, '_blank')}
+                  className="w-full md:w-auto"
                 >
-                  Skip
+                  Open Aladin
                 </Button>
-              )}
+              </div>
             </div>
 
-            <Button
-              variant="info"
-              onClick={() => window.open(`/aladin/${galaxy.ra}/${galaxy.dec}`, '_blank')}
-            >
-              Open Aladin
-            </Button>
+            {/* Form - shown second on mobile */}
+            <div className={`space-y-4 ${isMobile ? 'order-2' : ''}`}>
+              <ClassificationForm
+                onSubmit={handleSubmit}
+                currentClassification={currentClassification}
+                galaxy={galaxy}
+                disabled={isSubmitting}
+              />
+
+              {/* Navigation buttons */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <Button
+                  type="submit"
+                  form="classification-form"
+                  disabled={isSubmitting}
+                  className="col-span-2 md:col-span-1"
+                >
+                  {isSubmitting ? 'Submitting...' : 'Submit'}
+                </Button>
+                
+                {previousGalaxy ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => router.push(`/classify/${previousGalaxy.id}${queryParams ? `?${queryParams}` : ''}`)}
+                    disabled={isSubmitting}
+                  >
+                    Previous
+                  </Button>
+                ) : (
+                  <Button variant="secondary" disabled>Previous</Button>
+                )}
+
+                {nextGalaxy ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => router.push(`/classify/${nextGalaxy.id}${queryParams ? `?${queryParams}` : ''}`)}
+                    disabled={isSubmitting}
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button variant="secondary" disabled>Next</Button>
+                )}
+
+                {nextGalaxy ? (
+                  <Button
+                    variant="warning"
+                    onClick={handleSkip}
+                    disabled={isSubmitting}
+                  >
+                    Skip
+                  </Button>
+                ) : (
+                  <Button variant="warning" disabled>Skip</Button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </Layout>
   );
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  const { id } = context.params!;
+  // ... existing logic for fetching galaxy data
   
-  // Fetch galaxy data, next/previous galaxies, classification, etc.
-  // This would include the image processing logic
-  
+  // Generate initial images (URLs only, actual loading happens client-side)
+  const images = await ImageService.getGalaxyImages(galaxy.id, {
+    vmaxPercentile: 99.0,
+    vmaxPercentileRaw: 99.7
+  });
+
+  // Preserve query parameters for navigation
+  const queryParams = new URLSearchParams(context.query as any).toString();
+
   return {
     props: {
-      galaxy: {}, // populated galaxy data
-      imageUrls: [], // processed image URLs
-      // ... other props
+      galaxy,
+      nextGalaxy,
+      previousGalaxy,
+      currentClassification,
+      images,
+      queryParams
     }
   };
 };
